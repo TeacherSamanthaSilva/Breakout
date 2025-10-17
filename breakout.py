@@ -12,9 +12,8 @@ pygame.init()
 PRETO = (0, 0, 0)
 BRANCO = (255, 255, 255)
 VERMELHO = (255, 0, 0)
-VERDE = (0, 255, 0)
-AZUL = (0, 0, 255)
 AMARELO = (255, 255, 0)
+CINZA_CLARO = (200, 200, 200)
 
 # Configurações da Tela
 LARGURA_TELA = 800
@@ -26,44 +25,54 @@ pygame.display.set_caption("Pygame Breakout Simples")
 clock = pygame.time.Clock()
 FPS = 60
 
+# Fontes
+fonte_titulo = pygame.font.Font(None, 74)
+fonte_menu = pygame.font.Font(None, 40)
+
+# Estados do Jogo
+MENU = 0
+JOGANDO = 1
+GAME_OVER = 2
+VITORIA = 3
+estado_jogo = MENU # Começa no Menu!
+
 # =======================
-# 2. DEFINIÇÃO DOS OBJETOS
+# 2. DEFINIÇÃO DOS OBJETOS (Iniciais)
 # =======================
 
 # 2.1. Barra (Paddle)
 BARRA_LARGURA = 100
 BARRA_ALTURA = 10
 VELOCIDADE_BARRA = 8
-barra_rect = pygame.Rect(
-    (LARGURA_TELA - BARRA_LARGURA) // 2, 
-    ALTURA_TELA - 40, 
-    BARRA_LARGURA, 
-    BARRA_ALTURA
-)
 
 # 2.2. Bola
 BOLA_RAIO = 8
-bola_rect = pygame.Rect(LARGURA_TELA // 2 - BOLA_RAIO, ALTURA_TELA // 2 - BOLA_RAIO, BOLA_RAIO * 2, BOLA_RAIO * 2)
-VELOCIDADE_INICIAL = 2
-bola_dx = VELOCIDADE_INICIAL * random.choice([-1, 1])  # Começa para a esquerda ou direita
-bola_dy = -VELOCIDADE_INICIAL  # Começa subindo
+VELOCIDADE_INICIAL = 4 # Velocidade diminuída conforme solicitado
 
-# 2.3. Tijolos
+# Variáveis para a bola e tijolos (serão inicializadas na função 'reiniciar_jogo')
+barra_rect = None
+bola_rect = None
+bola_dx = 0
+bola_dy = 0
 tijolos = []
-TIJOLO_LARGURA = 70
-TIJOLO_ALTURA = 20
-LINHAS = 5
-TIJOLOS_POR_LINHA = LARGURA_TELA // (TIJOLO_LARGURA + 10) - 1 # Calcula quantos cabem
-MARGIN_SUPERIOR = 50
 
-# Lista de cores para as linhas de tijolos
-CORES_TIJOLOS = [VERMELHO, AMARELO, VERDE, AZUL, VERMELHO]
+
+# =======================
+# 3. FUNÇÕES DO JOGO
+# =======================
 
 def criar_tijolos():
+    """Cria a parede de tijolos."""
     global tijolos
     tijolos = []
     
-    # Cálculo para centralizar os tijolos
+    TIJOLO_LARGURA = 70
+    TIJOLO_ALTURA = 20
+    LINHAS = 5
+    TIJOLOS_POR_LINHA = LARGURA_TELA // (TIJOLO_LARGURA + 10) - 1
+    MARGIN_SUPERIOR = 50
+    CORES_TIJOLOS = [(255, 0, 0), (255, 100, 0), (255, 255, 0), (0, 255, 0), (0, 0, 255)] # Verm, Laranja, Amar, Verd, Azul
+
     espaco_total_necessario = TIJOLOS_POR_LINHA * (TIJOLO_LARGURA + 10) - 10
     offset_x = (LARGURA_TELA - espaco_total_necessario) // 2
     
@@ -75,23 +84,37 @@ def criar_tijolos():
             cor = CORES_TIJOLOS[linha % len(CORES_TIJOLOS)]
             
             tijolo_rect = pygame.Rect(tijolo_x, tijolo_y, TIJOLO_LARGURA, TIJOLO_ALTURA)
-            tijolos.append((tijolo_rect, cor)) # Armazena o Rect e a cor
-
-criar_tijolos()
+            tijolos.append((tijolo_rect, cor))
 
 
-# =======================
-# 3. FUNÇÕES DO JOGO
-# =======================
+def reiniciar_jogo():
+    """Define as posições iniciais para a barra e a bola."""
+    global barra_rect, bola_rect, bola_dx, bola_dy
+    
+    # 3.1. Reinicia a Barra
+    barra_rect = pygame.Rect(
+        (LARGURA_TELA - BARRA_LARGURA) // 2, 
+        ALTURA_TELA - 40, 
+        BARRA_LARGURA, 
+        BARRA_ALTURA
+    )
+
+    # 3.2. Reinicia a Bola
+    bola_rect = pygame.Rect(LARGURA_TELA // 2 - BOLA_RAIO, ALTURA_TELA - 60, BOLA_RAIO * 2, BOLA_RAIO * 2)
+    bola_dx = VELOCIDADE_INICIAL * random.choice([-1, 1])
+    bola_dy = -VELOCIDADE_INICIAL 
+
+    # 3.3. Cria os Tijolos
+    criar_tijolos()
+
 
 def mover_barra(teclas):
-    """Atualiza a posição da barra com base nas teclas pressionadas."""
+    """Atualiza a posição da barra."""
     if teclas[pygame.K_LEFT]:
         barra_rect.x -= VELOCIDADE_BARRA
     if teclas[pygame.K_RIGHT]:
         barra_rect.x += VELOCIDADE_BARRA
 
-    # Limita a barra na tela
     if barra_rect.left < 0:
         barra_rect.left = 0
     if barra_rect.right > LARGURA_TELA:
@@ -99,130 +122,140 @@ def mover_barra(teclas):
 
 
 def mover_bola():
-    """Atualiza a posição da bola e lida com colisões de paredes."""
-    global bola_dx, bola_dy
+    """Atualiza a posição da bola e checa as paredes."""
+    global bola_dx, bola_dy, estado_jogo
     
-    # 3.1. Movimento
     bola_rect.x += bola_dx
     bola_rect.y += bola_dy
 
-    # 3.2. Colisão com paredes laterais
+    # Colisão com paredes laterais e superior
     if bola_rect.left < 0 or bola_rect.right > LARGURA_TELA:
         bola_dx = -bola_dx
-
-    # 3.3. Colisão com a parede superior
     if bola_rect.top < 0:
         bola_dy = -bola_dy
 
-    # 3.4. Colisão com a parede inferior (GAME OVER)
+    # Colisão com a parede inferior (Game Over)
     if bola_rect.bottom > ALTURA_TELA:
-        return True # Indica Game Over
-    
-    return False # Jogo continua
+        estado_jogo = GAME_OVER # Muda o estado para Game Over
+
 
 def checar_colisoes():
     """Lida com as colisões da bola com a barra e os tijolos."""
-    global bola_dx, bola_dy, tijolos
+    global bola_dx, bola_dy, tijolos, estado_jogo
     
-    # 4.1. Colisão com a Barra
+    # Colisão com a Barra
     if bola_rect.colliderect(barra_rect) and bola_dy > 0:
         bola_dy = -bola_dy
-        
-        # Lógica simples para mudar a direção horizontal baseado em onde a bola bateu na barra
         diferenca = bola_rect.centerx - barra_rect.centerx
-        bola_dx = diferenca * 0.1 # Ajusta a direção, valor menor para mudança sutil
+        bola_dx = diferenca * 0.1 
 
-    # 4.2. Colisão com os Tijolos
+    # Colisão com os Tijolos
     tijolos_a_remover = []
     
     for i in range(len(tijolos)):
         tijolo_rect, tijolo_cor = tijolos[i]
         
         if bola_rect.colliderect(tijolo_rect):
-            # Encontrou o tijolo, marca para remoção
             tijolos_a_remover.append(i)
-            
-            # Inverte a direção vertical da bola (regra mais simples)
-            bola_dy = -bola_dy 
-            
-            # **NOTA:** Uma lógica de colisão mais avançada checaria se a bola bateu na lateral 
-            # do tijolo para inverter bola_dx, mas vamos manter simples por enquanto!
-            
-            break # Processa apenas um tijolo por vez para evitar bugs de colisão dupla
+            bola_dy = -bola_dy
+            break 
 
-    # Remove os tijolos atingidos (de trás para frente para não bagunçar os índices)
+    # Remove os tijolos atingidos
     for i in sorted(tijolos_a_remover, reverse=True):
         tijolos.pop(i)
+        
+    # Verifica se o jogador ganhou
+    if not tijolos:
+        estado_jogo = VITORIA
 
 
-def desenhar_tudo():
-    """Desenha todos os elementos na tela."""
-    TELA.fill(PRETO) # Limpa a tela
-
+def desenhar_jogo():
+    """Desenha a tela do jogo (barra, bola, tijolos)."""
+    TELA.fill(PRETO)
+    
     # Desenha a Barra
     pygame.draw.rect(TELA, BRANCO, barra_rect)
     
-    # Desenha a Bola (círculo no centro do rect)
+    # Desenha a Bola
     pygame.draw.circle(TELA, BRANCO, bola_rect.center, BOLA_RAIO)
 
     # Desenha os Tijolos
     for tijolo_rect, cor in tijolos:
         pygame.draw.rect(TELA, cor, tijolo_rect)
-        
-    # Atualiza a tela
-    pygame.display.flip()
+
+
+def tela_menu():
+    """Exibe o menu inicial e espera pelo 'Start'."""
+    TELA.fill(PRETO)
+    
+    # Título do Jogo
+    titulo = fonte_titulo.render("BREAKOUT CLÁSSICO", True, AMARELO)
+    titulo_rect = titulo.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 3))
+    TELA.blit(titulo, titulo_rect)
+    
+    # Mensagem "Pressione ESPAÇO para Iniciar"
+    start_msg = fonte_menu.render("Pressione ESPAÇO para INICIAR", True, CINZA_CLARO)
+    start_rect = start_msg.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2 + 50))
+    TELA.blit(start_msg, start_rect)
+
 
 # =======================
 # 4. LOOP PRINCIPAL
 # =======================
 
-game_over = False
 rodando = True
 while rodando:
-    # 4.1. Lidar com Eventos (Teclado/Mouse)
+    # 4.1. Lidar com Eventos
     for evento in pygame.event.get():
         if evento.type == pygame.QUIT:
             rodando = False
-            
-    # Checa o estado do teclado (para movimento contínuo)
+        
+        # Lógica de Transição de Estado:
+        if estado_jogo == MENU or estado_jogo == GAME_OVER or estado_jogo == VITORIA:
+            if evento.type == pygame.KEYDOWN and evento.key == pygame.K_SPACE:
+                # Se apertar ESPAÇO no menu/fim de jogo, o jogo começa/reinicia
+                reiniciar_jogo()
+                estado_jogo = JOGANDO
+
+    # Checa o estado do teclado (para movimento contínuo da barra)
     teclas = pygame.key.get_pressed()
 
-    if not game_over:
-        # 4.2. Atualizar a Lógica do Jogo
-        
-        mover_barra(teclas)
-        game_over = mover_bola() # Retorna True se a bola cair
-        checar_colisoes()
-        
-        # Verifica se o jogador ganhou
-        if not tijolos:
-            print("Parabéns! Você venceu!")
-            game_over = True
-
-    # 4.3. Desenhar na Tela
-    desenhar_tudo()
+    # 4.2. Executar Lógica Baseado no Estado
     
-    if game_over:
-        # Exibe mensagem de Game Over ou Vitória
+    if estado_jogo == MENU:
+        tela_menu()
+        
+    elif estado_jogo == JOGANDO:
+        mover_barra(teclas)
+        mover_bola() # Vai mudar o estado se for Game Over
+        checar_colisoes() # Vai mudar o estado se for Vitória
+        desenhar_jogo()
+        
+    elif estado_jogo == GAME_OVER or estado_jogo == VITORIA:
+        # Reutiliza o desenhar_jogo para ver o resultado final do jogo antes da mensagem
+        desenhar_jogo()
+        
+        # Exibe a mensagem
         TELA.fill(PRETO)
-        fonte = pygame.font.Font(None, 74)
         
-        if not tijolos:
-             texto = fonte.render("VITÓRIA!", True, AMARELO)
-        else:
-             texto = fonte.render("GAME OVER", True, VERMELHO)
-             
-        texto_rect = texto.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2))
-        TELA.blit(texto, texto_rect)
-        pygame.display.flip()
+        if estado_jogo == VITORIA:
+            msg = fonte_titulo.render("VITÓRIA!", True, VERMELHO)
+            sub_msg = fonte_menu.render("Pressione ESPAÇO para REINICIAR", True, CINZA_CLARO)
+        else: # GAME_OVER
+            msg = fonte_titulo.render("GAME OVER", True, AMARELO)
+            sub_msg = fonte_menu.render("Pressione ESPAÇO para REINICIAR", True, CINZA_CLARO)
+            
+        msg_rect = msg.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2 - 20))
+        sub_rect = sub_msg.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2 + 50))
         
-        # Adiciona um pequeno atraso para o usuário ver a mensagem antes de fechar
-        # (Você pode adicionar um loop para reiniciar o jogo aqui)
-        pygame.time.wait(3000)
-        rodando = False
+        TELA.blit(msg, msg_rect)
+        TELA.blit(sub_msg, sub_rect)
+        
 
-
-    # Controlar o FPS
+    # 4.3. Atualizar a Tela
+    pygame.display.flip()
+    
+    # 4.4. Controlar o FPS
     clock.tick(FPS)
 
 pygame.quit()
